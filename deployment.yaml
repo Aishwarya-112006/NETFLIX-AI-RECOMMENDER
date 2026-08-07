@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: netflix-ai
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: netflix-ai
+
+  template:
+    metadata:
+      labels:
+        app: netflix-ai
+
+    spec:
+      containers:
+      - name: netflix-ai
+
+        image: aishwaryasingh112006/netflix-ai:latest
+
+        ports:
+        - containerPort: 8501
+---
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: netflix-ai-service
+
+spec:
+  type: NodePort
+
+  selector:
+    app: netflix-ai
+
+  ports:
+  - port: 8501
+    targetPort: 8501
+    nodePort: 30001

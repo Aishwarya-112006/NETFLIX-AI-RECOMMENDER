@@ -1,0 +1,16 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML model files
+*.pkl
+similarity.pkl
+movie_list.pkl
+
+# Streamlit secrets
+.secrets/
+secrets.toml

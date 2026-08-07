@@ -1,0 +1,97 @@
+/* ==============================
+   General Styling
+============================== */
+
+[data-testid="stSidebar"]{
+    background-color: rgba(0,0,0,0.88);
+}
+
+.block-container{
+    padding-top:2rem;
+    padding-bottom:2rem;
+}
+
+h1,h2,h3,h4,h5,h6{
+    color:white;
+}
+
+p, label, span{
+    color:white;
+}
+
+.stButton>button{
+    background:#E50914;
+    color:white;
+    border:none;
+    border-radius:8px;
+}
+
+.stButton>button:hover{
+    background:#B20710;
+}
+/* ==========================================
+   Movie Card
+========================================== */
+
+.movie-card{
+    background: rgba(20,20,20,0.85);
+    border-radius:16px;
+    padding:15px;
+    margin-bottom:20px;
+    transition:0.3s ease;
+    border:1px solid rgba(255,255,255,0.08);
+}
+
+.movie-card:hover{
+    transform:translateY(-8px);
+    border:1px solid #E50914;
+    box-shadow:0 0 25px rgba(229,9,20,.45);
+}
+
+.movie-title{
+    color:white;
+    font-size:18px;
+    font-weight:bold;
+    text-align:center;
+    margin-top:10px;
+}
+
+.movie-info{
+    color:#DDDDDD;
+    font-size:14px;
+    text-align:center;
+}
+
+.overview{
+    color:#BBBBBB;
+    font-size:13px;
+    text-align:justify;
+}
+
+/* Sidebar Navigation */
+
+[data-testid="stSidebar"] {
+
+    border-right: 1px solid rgba(255,255,255,0.08);
+
+}
+
+/* Sidebar Links */
+
+[data-testid="stSidebar"] a {
+
+    border-radius: 10px;
+
+    padding: 8px 10px;
+
+    margin-bottom: 8px;
+
+    transition: 0.3s;
+
+}
+
+[data-testid="stSidebar"] a:hover {
+
+    background: rgba(229,9,20,0.25);
+
+}
