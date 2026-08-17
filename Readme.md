@@ -10,7 +10,7 @@ The system uses **Content-Based Filtering** and **Cosine Similarity** to recomme
 
 🌐 **Live Application:**
 
-https://netflix-ai-recommender-hrgjfbb5m6htf59wbljsei.streamlit.app/
+https://netflix-ai-recommender-hrgjfbb5m6htf59wbjlsei.streamlit.app/
 
 > The application is deployed using Streamlit Community Cloud.
 
