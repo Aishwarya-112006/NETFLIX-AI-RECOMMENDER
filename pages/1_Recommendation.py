@@ -1,13 +1,12 @@
-import streamlit as st
+import os
 import pickle
+import streamlit as st
 import requests
 
-from utils import load_css
-from utils_1 import set_background
 
-# =====================================================
-# Page Configuration
-# =====================================================
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
 st.set_page_config(
     page_title="Netflix Recommendation",
@@ -15,430 +14,315 @@ st.set_page_config(
     layout="wide"
 )
 
-load_css()
-set_background("assets/netflix_bg.jpg")
 
-# =====================================================
-# Watchlist Session
-# =====================================================
+# ============================================================
+# PATH CONFIGURATION
+# ============================================================
 
-if "watchlist" not in st.session_state:
-    st.session_state.watchlist = []
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# =====================================================
-# Title
-# =====================================================
+MOVIE_LIST_PATH = os.path.join(BASE_DIR, "movie_list.pkl")
+SIMILARITY_PATH = os.path.join(BASE_DIR, "similarity.pkl")
 
-st.title("🎬 Netflix Movie Recommendation System")
 
-st.write(
-    "Select a movie or TV show and get AI-powered recommendations."
-)
+# ============================================================
+# DOWNLOAD MODEL FILES IF NOT PRESENT
+# ============================================================
 
-st.markdown("---")
+def ensure_models():
+    """
+    Download movie_list.pkl and similarity.pkl from Google Drive
+    if they are not already present.
+    """
 
-# =====================================================
-# Load Pickle Files
-# =====================================================
+    if os.path.exists(MOVIE_LIST_PATH) and os.path.exists(SIMILARITY_PATH):
+        return
 
-movies = pickle.load(open("movie_list.pkl", "rb"))
-similarity = pickle.load(open("similarity.pkl", "rb"))
-# =====================================================
-# Filters
-# =====================================================
+    try:
+        from download_models import download_models
 
-st.markdown("## 🎯 Filter Movies")
+        with st.spinner("Downloading recommendation models..."):
+            download_models()
 
-col1, col2 = st.columns(2)
+    except Exception as e:
+        st.error("Unable to download recommendation models.")
+        st.error(str(e))
+        st.stop()
 
-with col1:
 
-    search = st.text_input(
-        "🔍 Search Movie",
-        placeholder="Enter movie name..."
-    )
+# ============================================================
+# LOAD MODELS
+# ============================================================
 
-with col2:
+@st.cache_resource
+def load_models():
 
-    sort_option = st.selectbox(
-        "Sort",
-        [
-            "A-Z",
-            "Z-A"
-        ]
-    )
+    ensure_models()
 
-# =====================================================
+    if not os.path.exists(MOVIE_LIST_PATH):
+        st.error("movie_list.pkl was not found.")
+        st.stop()
+
+    if not os.path.exists(SIMILARITY_PATH):
+        st.error("similarity.pkl was not found.")
+        st.stop()
+
+    try:
+        with open(MOVIE_LIST_PATH, "rb") as file:
+            movies = pickle.load(file)
+
+        with open(SIMILARITY_PATH, "rb") as file:
+            similarity = pickle.load(file)
+
+        return movies, similarity
+
+    except Exception as e:
+        st.error("Error while loading recommendation models.")
+        st.error(str(e))
+        st.stop()
+
+
+movies, similarity = load_models()
+
+
+# ============================================================
 # TMDB API
-# =====================================================
+# ============================================================
 
-API_KEY = "5a096566c02cbaa2c2cfbab5cc7bef38"
-
-# Example:
-# API_KEY = "123456789abcdef"
-
-# =====================================================
-# Fetch Poster
-# =====================================================
-def fetch_movie_details(movie_name):
+def fetch_poster(movie_id):
 
     try:
 
-        search_url = (
-            f"https://api.themoviedb.org/3/search/movie"
-            f"?api_key={API_KEY}"
-            f"&query={movie_name}"
-        )
+        url = f"https://api.themoviedb.org/3/movie/{movie_id}"
 
-        response = requests.get(search_url, timeout=10)
-
-        if response.status_code != 200:
-            return None
-
-        results = response.json()["results"]
-
-        if len(results) == 0:
-            return None
-
-        movie_id = results[0]["id"]
-
-        detail_url = (
-            f"https://api.themoviedb.org/3/movie/"
-            f"{movie_id}"
-            f"?api_key={API_KEY}"
-        )
-
-        detail = requests.get(detail_url).json()
-
-        poster = None
-
-        if detail.get("poster_path"):
-
-            poster = (
-                "https://image.tmdb.org/t/p/w500"
-                + detail["poster_path"]
-            )
-
-        genres = ", ".join(
-            [g["name"] for g in detail["genres"]]
-        )
-
-        return {
-
-            "poster": poster,
-
-            "title": detail["title"],
-
-            "rating": detail["vote_average"],
-
-            "release": detail["release_date"],
-
-            "runtime": detail["runtime"],
-
-            "genres": genres,
-
-            "overview": detail["overview"]
-
+        params = {
+            "api_key": st.secrets["TMDB_API_KEY"],
+            "language": "en-US"
         }
 
-    except:
-
-        return None
-
-# =====================================================
-# Fetch Trailer
-# =====================================================
-
-def fetch_trailer(movie_name):
-
-    try:
-
-        url = (
-            f"https://api.themoviedb.org/3/search/movie"
-            f"?api_key={API_KEY}"
-            f"&query={movie_name}"
+        response = requests.get(
+            url,
+            params=params,
+            timeout=10
         )
-
-        response = requests.get(url)
 
         data = response.json()
 
-        if len(data["results"]) == 0:
-            return None
+        poster_path = data.get("poster_path")
 
-        movie_id = data["results"][0]["id"]
+        if poster_path:
+            return "https://image.tmdb.org/t/p/w500" + poster_path
 
-        url = (
-            f"https://api.themoviedb.org/3/movie/"
-            f"{movie_id}/videos"
-            f"?api_key={API_KEY}"
-        )
-
-        response = requests.get(url)
-
-        videos = response.json()["results"]
-
-        for video in videos:
-
-            if (
-                video["site"] == "YouTube"
-                and video["type"] == "Trailer"
-            ):
-
-                return (
-                    "https://www.youtube.com/watch?v="
-                    + video["key"]
-                )
-
-    except:
+    except Exception:
         pass
 
     return None
 
-# =====================================================
-# Recommendation Function
-# =====================================================
+
+# ============================================================
+# RECOMMENDATION FUNCTION
+# ============================================================
 
 def recommend(movie):
 
-    index = movies[movies["title"] == movie].index[0]
+    try:
 
-    distances = similarity[index]
+        # Find selected movie index
+        movie_index = movies[movies["title"] == movie].index[0]
 
-    movie_list = sorted(
-        list(enumerate(distances)),
-        reverse=True,
-        key=lambda x: x[1]
-    )[1:6]
+        # Get similarity scores
+        distances = similarity[movie_index]
 
-    recommended_movies = []
-    recommended_details = []
-
-    for i in movie_list:
-
-        movie_title = movies.iloc[i[0]].title
-
-        recommended_movies.append(movie_title)
-
-        recommended_details.append(fetch_movie_details(movie_title))
-
-    return recommended_movies, recommended_details
-
-st.markdown("---")
-
-st.subheader("🎬 Movie Details Explorer")
-
-movie_name = st.selectbox(
-
-    "Choose any movie",
-
-    movies["title"].values,
-
-    key="details"
-
-)
-
-details = fetch_movie_details(movie_name)
-
-if details:
-
-    col1, col2 = st.columns([1,2])
-
-    with col1:
-
-        st.image(
-            details["poster"],
-            use_container_width=True
+        # Sort movies according to similarity
+        movie_list = sorted(
+            list(enumerate(distances)),
+            reverse=True,
+            key=lambda x: x[1]
         )
 
-    with col2:
+        recommended_movies = []
+        recommended_posters = []
 
-        st.markdown(f"# {details['title']}")
+        # Get top 5 recommendations
+        for i in movie_list[1:6]:
 
-        st.write(
-            f"⭐ Rating: {details['rating']}"
-        )
+            movie_index = i[0]
 
-        st.write(
-            f"📅 Release: {details['release']}"
-        )
+            title = movies.iloc[movie_index].title
 
-        st.write(
-            f"⏱ Runtime: {details['runtime']} min"
-        )
+            recommended_movies.append(title)
 
-        st.write(
-            f"🎭 Genres: {details['genres']}"
-        )
+            # Try to get poster
+            poster = None
 
-        st.write(details["overview"])
-
-        trailer = fetch_trailer(movie_name)
-
-        if trailer:
-
-            st.link_button(
-                "▶ Watch Trailer",
-                trailer,
-                use_container_width=True
-            )
-
-        else:
-
-            st.info("Trailer not available.")
-
-# =====================================================
-# Movie Dropdown
-# =====================================================
-
-movie_list = movies["title"].tolist()
-
-if search:
-
-    movie_list = [
-        movie for movie in movie_list
-        if search.lower() in movie.lower()
-    ]
-
-if sort_option == "A-Z":
-    movie_list = sorted(movie_list)
-
-else:
-    movie_list = sorted(movie_list, reverse=True)
-
-selected_movie = st.selectbox(
-    "🎥 Choose a Movie",
-    movie_list
-)
-st.info(f"🎬 {len(movie_list)} movies available")
-
-# =====================================================
-# Recommend Button
-# =====================================================
-
-if st.button("🍿 Recommend Movies", use_container_width=True):
-
-    names, details = recommend(selected_movie)
-
-    st.markdown("## 🎬 Recommended For You")
-
-    cols = st.columns(5)
-
-    for idx in range(5):
-
-        with cols[idx]:
-
-            movie = details[idx]
-
-            if movie and movie["poster"]:
-                st.image(movie["poster"], use_container_width=True)
-            else:
-                st.image(
-                    "https://via.placeholder.com/300x450?text=No+Poster",
-                    use_container_width=True
+            if "id" in movies.columns:
+                poster = fetch_poster(
+                    movies.iloc[movie_index]["id"]
                 )
 
-            st.markdown(
-                f"""
-                <div class="movie-card">
+            elif "movie_id" in movies.columns:
+                poster = fetch_poster(
+                    movies.iloc[movie_index]["movie_id"]
+                )
 
-                <div class="movie-title">
+            recommended_posters.append(poster)
 
-                {names[idx]}
+        return recommended_movies, recommended_posters
 
-                </div>
+    except Exception as e:
 
-                """,
-                unsafe_allow_html=True
-            )
+        st.error("Unable to generate recommendations.")
+        st.error(str(e))
 
-            if movie:
+        return [], []
 
-                st.write(f"⭐ Rating: {movie['rating']}")
 
-                st.write(f"📅 Year: {movie['release']}")
+# ============================================================
+# PAGE TITLE
+# ============================================================
 
-                st.caption(movie["overview"][:140] + "...")
+st.markdown(
+    """
+    <h1 style="
+        text-align:center;
+        font-size:42px;
+        margin-bottom:10px;
+    ">
+        🎬 Netflix Movie Recommendation System
+    </h1>
+    """,
+    unsafe_allow_html=True
+)
 
-                trailer = fetch_trailer(names[idx])
+st.markdown(
+    """
+    <p style="
+        text-align:center;
+        font-size:18px;
+        margin-bottom:35px;
+    ">
+        Select a movie or TV show and get AI-powered recommendations.
+    </p>
+    """,
+    unsafe_allow_html=True
+)
 
-                if trailer:
 
-                    st.link_button(
-                        "▶️ Watch Trailer",
-                        trailer,
+# ============================================================
+# MOVIE SELECTION
+# ============================================================
+
+if "title" not in movies.columns:
+
+    st.error(
+        "The movie_list.pkl file does not contain a 'title' column."
+    )
+    st.stop()
+
+
+movie_titles = movies["title"].values
+
+
+selected_movie = st.selectbox(
+    "🎥 Select a movie or TV show",
+    movie_titles
+)
+
+
+# ============================================================
+# RECOMMEND BUTTON
+# ============================================================
+
+if st.button(
+    "✨ Get Recommendations",
+    use_container_width=True
+):
+
+    with st.spinner("Finding movies similar to your selection..."):
+
+        names, posters = recommend(selected_movie)
+
+    if names:
+
+        st.markdown(
+            f"## 🎯 Recommended Movies for **{selected_movie}**"
+        )
+
+        # Create five columns
+        cols = st.columns(5)
+
+        for col, name, poster in zip(
+            cols,
+            names,
+            posters
+        ):
+
+            with col:
+
+                if poster:
+
+                    st.image(
+                        poster,
                         use_container_width=True
                     )
 
                 else:
 
-                    st.button(
-                        "Trailer Not Available",
-                        disabled=True,
-                        key=f"disabled_{idx}"
+                    st.markdown(
+                        """
+                        <div style="
+                            height:250px;
+                            display:flex;
+                            align-items:center;
+                            justify-content:center;
+                            background:#222;
+                            border-radius:10px;
+                            font-size:50px;
+                        ">
+                        🎬
+                        </div>
+                        """,
+                        unsafe_allow_html=True
                     )
 
-            if st.button("➕ Add to Watchlist", key=f"watch_{idx}"):
+                st.markdown(
+                    f"""
+                    <p style="
+                        text-align:center;
+                        font-weight:bold;
+                        margin-top:10px;
+                    ">
+                        {name}
+                    </p>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-                if names[idx] not in st.session_state.watchlist:
 
-                    st.session_state.watchlist.append(names[idx])
-
-                    st.success("Added!")
-
-                else:
-
-                    st.info("Already Added")
-            st.markdown(
-                "</div>",
-                unsafe_allow_html=True
-            )
-
-# =====================================================
-# Watchlist
-# =====================================================
-
-st.markdown("---")
-
-st.subheader("⭐ My Watchlist")
-
-if len(st.session_state.watchlist) == 0:
-
-    st.info("Your watchlist is empty.")
-
-else:
-
-    for movie in st.session_state.watchlist:
-
-        st.write("🎬", movie)
-
-# =====================================================
-# Clear Watchlist
-# =====================================================
-
-if st.button("🗑 Clear Watchlist"):
-
-    st.session_state.watchlist = []
-
-    st.rerun()
-
-# =====================================================
-# Footer
-# =====================================================
+# ============================================================
+# INFORMATION SECTION
+# ============================================================
 
 st.markdown("---")
 
 st.markdown(
     """
-<div style='text-align:center'>
+    ### 🤖 How does it work?
 
-### ❤️ Developed by Aishwarya Singh
+    This recommendation system uses **Content-Based Filtering**
+    and **Cosine Similarity** to identify movies and TV shows
+    that are similar to the selected title.
 
-Netflix AI Recommendation System
+    The system analyzes information such as:
 
-Python • Streamlit • Scikit-Learn • TMDB API
+    - 🎭 Genres
+    - 🎬 Cast
+    - ✍️ Description
+    - 🎥 Director
+    - 🌍 Country
+    - ⭐ Other movie metadata
 
-</div>
-""",
-    unsafe_allow_html=True
+    The five most similar titles are then displayed as
+    recommendations.
+    """
 )
